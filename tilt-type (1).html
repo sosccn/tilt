@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>TILT TYPE — เอียงพิมพ์ให้ไว</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* ===== Design tokens — "Cabinet Arcade / Neon Tilt" ===== */
+  :root{
+    --bg-deep:#0B0B0D;      /* deep aubergine, richer than black */
+    --bg-panel:#16161A;     /* plum panel */
+    --bg-key:#1E1E22;       /* unlit arcade key */
+    --cyan:#FFFFFF;         /* ball / active */
+    --magenta:#9A9AA2;      /* target word / alert */
+    --amber:#F2F2F5;        /* score / time / reward */
+    --text-hi:#F4F4F6;
+    --text-dim:#8A8A92;
+    --grid-line:rgba(154,154,162,.14);
+    --ok:#AEAEB5;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;margin:0;}
+  body{
+    font-family:"Noto Sans Thai","Chakra Petch",sans-serif;
+    background:
+      radial-gradient(120% 80% at 50% -10%, #1A1A1E 0%, var(--bg-deep) 55%, #050506 100%);
+    color:var(--text-hi);
+    overflow:hidden;
+    user-select:none;-webkit-user-select:none;
+    touch-action:manipulation;
+  }
+  .app{position:fixed;inset:0;display:flex;flex-direction:column;max-width:560px;margin:0 auto;}
+
+  /* Ambient tilt-floor: the signature element */
+  .floor{
+    position:fixed;inset:-40% -20% -20% -20%;z-index:0;pointer-events:none;
+    background-image:
+      linear-gradient(var(--grid-line) 1px,transparent 1px),
+      linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);
+    background-size:48px 48px;
+    transform:perspective(520px) rotateX(62deg) translate3d(0,10%,0);
+    transform-origin:50% 100%;
+    mask-image:linear-gradient(to top, #000 0%, transparent 72%);
+    -webkit-mask-image:linear-gradient(to top, #000 0%, transparent 72%);
+    transition:transform .12s ease-out;
+    will-change:transform;
+  }
+
+  .screen{position:relative;z-index:1;flex:1;display:none;flex-direction:column;padding:22px 20px calc(20px + env(safe-area-inset-bottom));min-height:0;}
+  .screen.active{display:flex;}
+
+  /* ===== Marquee header ===== */
+  .marquee{text-align:center;margin-top:6px;}
+  .marquee h1{
+    font-family:"Chakra Petch",sans-serif;font-weight:700;letter-spacing:.04em;
+    font-size:clamp(34px,11vw,52px);line-height:.98;margin:0;
+    color:var(--text-hi);
+    
+  }
+  .marquee h1 .b{color:var(--magenta);}
+  .marquee p{margin:.5em 0 0;color:var(--text-dim);font-size:14px;letter-spacing:.02em;}
+
+  /* ===== Buttons ===== */
+  .btn{
+    font-family:"Chakra Petch",sans-serif;font-weight:600;letter-spacing:.03em;
+    border:2px solid transparent;border-radius:14px;padding:15px 18px;font-size:17px;
+    background:var(--bg-panel);color:var(--text-hi);cursor:pointer;width:100%;
+    transition:transform .08s ease, box-shadow .15s ease, background .15s ease;
+  }
+  .btn:active{transform:translateY(2px) scale(.99);}
+  .btn.primary{background:linear-gradient(180deg,#FFFFFF,#C8C8CE);color:#0A0A0A;border-color:#FFFFFF;}
+  .btn.magenta{background:linear-gradient(180deg,#E0E0E6,#B0B0B6);color:#0A0A0A;border-color:#F0F0F2;}
+  .btn.ghost{background:transparent;border-color:#34343A;color:var(--text-dim);}
+  .btn:focus-visible{outline:3px solid var(--amber);outline-offset:2px;}
+
+  .modes{display:flex;flex-direction:column;gap:12px;margin-top:auto;}
+  .mode{display:flex;align-items:center;gap:14px;text-align:left;}
+  .mode .ic{font-size:26px;width:34px;text-align:center;flex:none;}
+  .mode .tx b{display:block;font-size:17px;}
+  .mode .tx span{display:block;font-size:12.5px;color:var(--text-dim);font-family:"Noto Sans Thai";font-weight:400;}
+  .row{display:flex;gap:12px;margin-top:12px;}
+  .row .btn{width:auto;flex:1;}
+
+  .hint{margin-top:16px;color:var(--text-dim);font-size:12.5px;text-align:center;line-height:1.6;}
+
+  /* ===== Calibrate ===== */
+  .center{margin:auto;text-align:center;max-width:340px;}
+  .phone-ic{font-size:64px;margin-bottom:10px;animation:tiltwiggle 2.4s ease-in-out infinite;}
+  @keyframes tiltwiggle{0%,100%{transform:rotate(-11deg)}50%{transform:rotate(11deg)}}
+  .center h2{font-family:"Chakra Petch";font-weight:700;font-size:24px;margin:.2em 0;}
+  .center p{color:var(--text-dim);font-size:14.5px;line-height:1.7;margin:.4em 0 1.4em;}
+  .status{font-size:13px;line-height:1.6;margin:0 0 10px;padding:10px 12px;border-radius:10px;
+    background:rgba(90,90,96,.14);color:var(--text-dim);text-align:left;}
+  .status.ok{background:rgba(174,174,181,.12);color:var(--ok);border:1px solid rgba(174,174,181,.35);}
+  .status.warn{background:rgba(240,240,245,.1);color:#D0D0D6;border:1px solid rgba(240,240,245,.35);}
+  .status:empty{display:none;}
+  .readout{font-family:"Chakra Petch";font-weight:600;letter-spacing:.08em;color:var(--cyan);
+    font-size:15px;margin-bottom:16px;opacity:.92;}
+
+  /* ===== Game HUD ===== */
+  .hud{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .hud .stat{font-family:"Chakra Petch";font-weight:600;text-align:center;}
+  .hud .stat small{display:block;font-size:10px;color:var(--text-dim);letter-spacing:.12em;font-weight:500;}
+  .hud .stat b{font-size:22px;letter-spacing:.02em;}
+  #hudTime b{color:var(--amber);}
+  #hudScore b{color:var(--cyan);}
+  .iconbtn{background:transparent;border:none;color:var(--text-dim);font-size:20px;padding:6px;cursor:pointer;}
+  .iconbtn.snd{font-size:12px;letter-spacing:.03em;}
+  .iconbtn.muted{opacity:.35;text-decoration:line-through;}
+
+  .target{
+    margin:12px 0 4px;text-align:center;font-family:"Chakra Petch";font-weight:700;
+    font-size:clamp(26px,8.5vw,40px);letter-spacing:.14em;min-height:1.2em;
+  }
+  .target .ch{display:inline-block;color:#4A4A50;transition:color .1s,text-shadow .1s,transform .1s;}
+  .target .ch.done{color:var(--ok);}
+  .target .ch.next{color:var(--magenta);transform:translateY(-3px) scale(1.06);}
+
+  /* ===== Playfield ===== */
+  .play{position:relative;flex:1;min-height:0;margin-top:6px;border-radius:18px;
+    background:linear-gradient(180deg, rgba(22,22,26,.55), rgba(8,8,10,.75));
+    border:1px solid rgba(154,154,162,.15);overflow:hidden;touch-action:none;}
+  .grid{position:absolute;inset:10px;display:grid;grid-template-columns:repeat(6,1fr);grid-template-rows:repeat(6,1fr);gap:7px;}
+  .key{display:flex;align-items:center;justify-content:center;border-radius:12px;
+    background:var(--bg-key);color:#B0B0B6;font-family:"Chakra Petch";font-weight:600;
+    font-size:clamp(15px,4.6vw,23px);border:1px solid rgba(90,90,96,.25);transition:transform .06s;}
+  .key.gap{background:rgba(34,34,40,.28);border-style:dashed;border-color:rgba(90,90,96,.18);}
+  .key.del{color:var(--magenta);}
+  .key.hot{background:#34343A;color:#FFFFFF;border-color:#FFFFFF;transform:scale(1.04);}
+  .key.tapmode{cursor:pointer;}
+  .key.punch{animation:punch .18s ease;}
+  @keyframes punch{0%{transform:scale(1.04)}45%{transform:scale(.9)}100%{transform:scale(1.04)}}
+
+  .ball{position:absolute;width:30px;height:30px;border-radius:50%;left:0;top:0;margin:-15px 0 0 -15px;
+    background:#F4F4F6;border:2px solid #0A0A0A;pointer-events:none;z-index:3;will-change:transform;}
+  .trail{position:absolute;width:14px;height:14px;border-radius:50%;margin:-7px 0 0 -7px;
+    background:var(--cyan);pointer-events:none;z-index:2;opacity:.5;}
+  .dwell{position:absolute;pointer-events:none;z-index:2;opacity:0;
+    transform:translate(-50%,-50%) rotate(-90deg);transition:opacity .12s;}
+  .dwell.show{opacity:1;}
+  .dwell .ring{fill:none;stroke:var(--amber);stroke-width:8;stroke-linecap:round;
+    stroke-dasharray:276.46;stroke-dashoffset:276.46;
+    }
+  @media (prefers-reduced-motion: reduce){ .dwell .ring{} }
+
+  .badge{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:4;
+    background:rgba(154,154,162,.16);border:1px solid rgba(154,154,162,.5);color:#D0D0D6;
+    font-size:11.5px;padding:5px 12px;border-radius:20px;font-family:"Noto Sans Thai";
+    display:none;white-space:nowrap;}
+  .badge.show{display:block;}
+
+  .flash{position:absolute;inset:0;z-index:5;pointer-events:none;opacity:0;}
+  .flash.ok{background:radial-gradient(circle,rgba(174,174,181,.35),transparent 70%);animation:flash .45s ease;}
+  .flash.bad{background:radial-gradient(circle,rgba(154,154,162,.3),transparent 70%);animation:flash .3s ease;}
+  @keyframes flash{0%{opacity:1}100%{opacity:0}}
+
+  /* ===== Result ===== */
+  .result .center h2{font-size:22px;color:var(--text-dim);font-weight:500;}
+  .bigscore{font-family:"Chakra Petch";font-weight:700;font-size:clamp(48px,17vw,74px);margin:.05em 0;line-height:1;color:var(--amber);}
+  .bigscore.rec{color:var(--cyan);}
+  .recbadge{display:inline-block;background:var(--magenta);color:#0A0A0A;font-family:"Chakra Petch";font-weight:700;font-size:13px;padding:4px 12px;border-radius:20px;letter-spacing:.08em;margin-bottom:6px;}
+  .namewrap{display:flex;gap:8px;margin:16px 0 6px;}
+  .namewrap input{flex:1;min-width:0;background:var(--bg-panel);border:2px solid #34343A;border-radius:12px;color:var(--text-hi);
+    font-family:"Chakra Petch";font-size:18px;text-align:center;letter-spacing:.15em;padding:12px;text-transform:uppercase;}
+  .namewrap input:focus{outline:none;border-color:var(--cyan);}
+
+  /* ===== Leaderboard ===== */
+  .lb-tabs{display:flex;gap:8px;margin:14px 0 10px;}
+  .lb-tabs button{flex:1;background:var(--bg-panel);border:1px solid #34343A;border-radius:10px;color:var(--text-dim);
+    font-family:"Chakra Petch";font-weight:600;font-size:13.5px;padding:9px 4px;cursor:pointer;}
+  .lb-tabs button.on{background:var(--bg-key);color:var(--text-hi);border-color:var(--cyan);}
+  .lb-list{flex:1;overflow-y:auto;min-height:0;}
+  .lb-row{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:12px;margin-bottom:8px;background:var(--bg-panel);}
+  .lb-row .rk{font-family:"Chakra Petch";font-weight:700;font-size:18px;width:30px;text-align:center;color:var(--text-dim);}
+  .lb-row.top1 .rk{color:var(--amber);} .lb-row.top2 .rk{color:#D0D0D6;} .lb-row.top3 .rk{color:#9A9AA2;}
+  .lb-row .nm{flex:1;font-family:"Chakra Petch";font-weight:600;letter-spacing:.06em;text-transform:uppercase;}
+  .lb-row .sc{font-family:"Chakra Petch";font-weight:700;color:var(--cyan);}
+  .lb-empty{color:var(--text-dim);text-align:center;padding:40px 10px;font-size:14px;}
+
+  .footer-row{display:flex;gap:12px;margin-top:12px;}
+  .footer-row .btn{flex:1;}
+
+  .ctrls{display:flex;justify-content:center;margin-top:10px;}
+  .ctrls .del{font-family:"Chakra Petch";font-weight:600;font-size:15px;letter-spacing:.03em;
+    background:var(--bg-panel);border:1px solid #34343A;color:var(--magenta);
+    border-radius:12px;padding:11px 28px;cursor:pointer;}
+  .ctrls .del:active{transform:translateY(2px);}
+
+  @media (prefers-reduced-motion: reduce){
+    .floor{transition:none;}.phone-ic{animation:none;}
+    .flash.ok,.flash.bad,.key.punch{animation:none;}
+  }
+  #road{position:absolute;inset:0;width:100%;height:100%;display:block;}
+</style>
+</head>
+<body>
+<div class="floor" id="floor" aria-hidden="true"></div>
+<div class="app">
+
+  <!-- HOME -->
+  <section class="screen active" id="scHome">
+    <div class="marquee">
+      <h1>TILT<span class="b">TYPE</span></h1>
+      <p>เอียงมือถือคุมลูกบอล · ค้างเพื่อพิมพ์ · หรือเอียงหลบขับรถ</p>
+    </div>
+    <div class="modes">
+      <button class="btn mode" data-mode="easy">
+        <span class="tx"><b>Easy — มือใหม่</b><span>คำสั้น 3 คำ ยิ่งไวยิ่งดี เหมาะกับเด็กและคนเพิ่งลอง</span></span>
+      </button>
+      <button class="btn mode" data-mode="hard">
+        <span class="tx"><b>Hard — เซียน</b><span>คำยาว 3 คำ วัดกันที่ความแม่นและความไว</span></span>
+      </button>
+      <button class="btn mode" data-mode="time">
+        <span class="tx"><b>Time Attack — 60 วิ</b><span>พิมพ์ให้ได้เยอะที่สุดใน 1 นาที</span></span>
+      </button>
+      <button class="btn mode" data-mode="drive">
+        <span class="tx"><b>ขับรถ — เอียงหลบ</b><span>เอียงจอซ้าย-ขวาบังคับรถ หลบสิ่งกีดขวางให้ไกลที่สุด</span></span>
+      </button>
+    </div>
+    <div class="row">
+      <button class="btn ghost" id="btnBoard">กระดานคนเก่ง</button>
+    </div>
+    <p class="hint">เกมนี้ใช้การเอียงเครื่อง — เปิดบนมือถือผ่านลิงก์ https แล้ว "อนุญาต" ให้ใช้เซนเซอร์การเคลื่อนไหว</p>
+  </section>
+
+  <!-- CALIBRATE -->
+  <section class="screen" id="scCal">
+    <div class="center">
+      <h2 id="calTitle">ตั้งท่าให้พร้อม</h2>
+      <p id="calText">ถือมือถือในท่าที่ถนัด (เอียงเข้าหาตัวนิดหน่อยก็ได้) ตำแหน่งนี้จะกลายเป็นจุดกึ่งกลาง</p>
+      <div id="calStatus" class="status"></div>
+      <div id="calReadout" class="readout">β —   γ —</div>
+      <button class="btn primary" id="btnBegin">ขอสิทธิ์เซนเซอร์ &amp; เริ่ม</button>
+      <button class="btn ghost" id="btnCalBack" style="margin-top:10px;">ย้อนกลับ</button>
+    </div>
+  </section>
+
+  <!-- GAME -->
+  <section class="screen" id="scGame">
+    <div class="hud">
+      <button class="iconbtn" id="btnQuit" aria-label="ออก">✕</button>
+      <div class="stat" id="hudTime"><small>เวลา</small><b>0.0</b></div>
+      <div class="stat" id="hudScore"><small>คำ</small><b>0</b></div>
+      <button class="iconbtn snd" id="btnSound" aria-label="เสียง">เสียง</button>
+    </div>
+    <div class="target" id="target"></div>
+    <div class="play" id="play">
+      <div class="grid" id="grid"></div>
+      <div class="ball" id="ball"></div>
+      <svg class="dwell" id="dwell" viewBox="0 0 100 100" aria-hidden="true"><circle class="ring" cx="50" cy="50" r="44"></circle></svg>
+      <div class="flash" id="flash"></div>
+    </div>
+    <p class="hint" id="gameHint">เอียงไปค้างบนตัวอักษรเพื่อพิมพ์ (ไม่ต้องแตะ)</p>
+  </section>
+
+  <!-- DRIVE -->
+  <section class="screen" id="scDrive">
+    <div class="hud">
+      <button class="iconbtn" id="btnQuitDrive" aria-label="ออก">✕</button>
+      <div class="stat" id="hudDist"><small>ระยะทาง</small><b>0</b></div>
+      <div class="stat" id="hudBest"><small>สถิติ</small><b>0</b></div>
+      <button class="iconbtn snd" id="btnSoundD" aria-label="เสียง">เสียง</button>
+    </div>
+    <div class="play" id="drivePlay">
+      <canvas id="road"></canvas>
+      <div class="flash" id="driveFlash"></div>
+    </div>
+    <p class="hint">เอียงจอซ้าย–ขวาเพื่อเลี้ยวรถ · หลบสิ่งกีดขวางให้ไกลที่สุด</p>
+  </section>
+
+  <!-- RESULT -->
+  <section class="screen result" id="scResult">
+    <div class="center">
+      <div id="recBadge" class="recbadge" style="display:none;">สถิติใหม่</div>
+      <h2 id="resLabel">เวลาที่ใช้</h2>
+      <div class="bigscore" id="resScore">0.0</div>
+      <div id="nameBlock">
+        <div class="namewrap">
+          <input id="nameInput" maxlength="8" placeholder="ชื่อคุณ" value="YOU" />
+          <button class="btn primary" id="btnSave" style="width:auto;padding-left:22px;padding-right:22px;">บันทึก</button>
+        </div>
+      </div>
+      <div class="footer-row">
+        <button class="btn magenta" id="btnAgain">เล่นอีกครั้ง</button>
+        <button class="btn ghost" id="btnHome">หน้าแรก</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- LEADERBOARD -->
+  <section class="screen" id="scBoard">
+    <div class="marquee"><h1 style="font-size:34px;">กระดาน<span class="b">คนเก่ง</span></h1></div>
+    <div class="lb-tabs">
+      <button data-lb="easy" class="on">Easy</button>
+      <button data-lb="hard">Hard</button>
+      <button data-lb="time">Time</button>
+      <button data-lb="drive">Drive</button>
+    </div>
+    <div class="lb-list" id="lbList"></div>
+    <div class="footer-row">
+      <button class="btn ghost" id="btnBoardClear">ล้างกระดาน</button>
+      <button class="btn ghost" id="btnBoardBack">ย้อนกลับ</button>
+    </div>
+  </section>
+
+</div>
+
+<script>
+"use strict";
+/* =========================================================
+   TILT TYPE — Open House arcade tilt-to-type game
+   Single-file, offline, hardware-sensor driven.
+   ========================================================= */
+
+/* ---------- Word pools (A–Z only, to match the grid) ---------- */
+const WORDS = {
+  easy: ["CAT","DOG","SUN","FUN","BOOK","GAME","PLAY","CODE","DATA","OPEN",
+         "PIXEL","LASER","ROBOT","STAR","BYTE","LOOP","WIFI","MATH","LAB","QUIZ"],
+  hard: ["OPENHOUSE","ROBOTICS","SCIENCE","COMPUTER","ALGORITHM","INTERNET",
+         "SOFTWARE","HARDWARE","INNOVATE","VARIABLE","FUNCTION","KEYBOARD",
+         "MAGNETIC","QUANTUM","CIRCUIT","PYTHON2026","ROBOT2026","SCIENCE101",
+         "OPENHOUSE26","LAB404","WIFI5G","AI2026","QUEST99","BINARY10"]
+};
+const WORDS_PER_ROUND = 3;   // easy & hard
+const TIME_LIMIT = 60;       // time-attack seconds
+const DWELL_MS = 600;        // hold-on-a-key time to auto-select (no tap)
+const DWELL_COOLDOWN = 160;  // brief reset so holding repeats a letter (OO, etc.)
+const DWELL_CIRC = 276.46;   // 2*pi*r, r=44 (matches the SVG ring)
+/* ---- driving mode (pseudo-3D) ---- */
+const STEER_RANGE = 20;      // degrees of tilt for full left/right lock
+const CAM_Z = 0.32;          // camera projection distance (perspective strength)
+const DRIVE_SPD0 = 1.7;      // forward speed at start (depth-units/sec)
+const DRIVE_SPD_GAIN = 0.03; // speed added per 100 m
+const DRIVE_METER = 20;      // metres shown per depth-unit travelled
+const DRIVE_SPAWN_Z = 3.4;   // depth where obstacles first appear (far)
+const CAR_W_FRAC = 0.40;     // car width as a fraction of road half-width
+const LANE_EDGE = 0.80;      // furthest lane centre a car can sit and stay on road
+const COLLIDE_LANE = 0.40;   // |lane gap| counted as a crash (= two half-cars)
+const DRIVE_SLOTS = [-0.55, 0, 0.55]; // lanes for multi-car walls (open slot always safe)
+const STEER_REACH = 1.20;    // how far tilt can push the car (past the road edge)
+const OFFROAD = 1.02;        // |lane| beyond this = wheels off the road -> crash
+
+/* ---------- Grid layout: 5 cols x 6 rows = 30 cells ---------- */
+/* A..Y fill rows 1-5, then Z + DEL + 3 gaps on the last row.   */
+const COLS = 6, ROWS = 6;
+function buildLayout(){
+  const arr = [];
+  for(let i=0;i<26;i++) arr.push(String.fromCharCode(65+i)); // A..Z
+  for(let d=0;d<10;d++) arr.push(String(d));                 // 0..9
+  return arr;                                                 // 36 cells, no gaps
+}
+const LAYOUT = buildLayout();
+
+/* ---------- Pure helpers (also unit-tested in Node) ---------- */
+// nearest cell index from ball fraction (fx,fy in 0..1)
+function cellIndexFromFraction(fx,fy){
+  let col = Math.floor(fx*COLS); if(col<0)col=0; if(col>=COLS)col=COLS-1;
+  let row = Math.floor(fy*ROWS); if(row<0)row=0; if(row>=ROWS)row=ROWS-1;
+  return row*COLS + col;
+}
+// pick a word avoiding the previous one
+function pickWord(pool, prev){
+  if(pool.length<=1) return pool[0];
+  let w; do { w = pool[Math.floor(Math.random()*pool.length)]; } while(w===prev);
+  return w;
+}
+// insert a score and return sorted top-N. lowerIsBetter for time modes.
+function rankInsert(list, entry, lowerIsBetter, cap){
+  const out = list.concat([entry]);
+  out.sort((a,b)=> lowerIsBetter ? a.score-b.score : b.score-a.score);
+  return out.slice(0, cap||5);
+}
+// smoothing step toward target, clamped to [min,max]
+function lerpClamp(cur, target, k, min, max){
+  let v = cur + (target-cur)*k;
+  if(v<min)v=min; if(v>max)v=max;
+  return v;
+}
+// which modes rank fastest-time-wins vs biggest-number-wins
+function isLowerBetter(mode){ return mode==="easy" || mode==="hard"; }
+// leaderboard value formatting per mode
+function fmtScore(mode, s){
+  if(mode==="time")  return s+" คำ";
+  if(mode==="drive") return s+" ม.";
+  return (typeof s==="number"?s.toFixed(1):s)+" วิ";
+}
+// axis-aligned box overlap (car vs obstacle)
+function rectsOverlap(ax,ay,aw,ah, bx,by,bw,bh){
+  return ax < bx+bw && ax+aw > bx && ay < by+bh && ay+ah > by;
+}
+// tilt -> target car centre x, clamped inside the road
+function steerTargetX(gamma, neutralGamma, mid, half){
+  let n=(gamma-neutralGamma)/STEER_RANGE; if(n<-1)n=-1; if(n>1)n=1;
+  return mid + n*half;
+}
+// perspective: how "near" a depth is (1 = at camera, ->0 far). zw>=0
+function projNear(zw){ return CAM_Z/(CAM_Z+Math.max(0,zw)); }
+// inverse: recover depth from a nearness value (0..1)
+function depthFromNear(near){ return near<=0 ? Infinity : CAM_Z*(1/near - 1); }
+
+/* ---------- Leaderboard store: persisted with localStorage.
+   Persistence works on real hosting (HTTPS / your own domain). In some
+   sandboxed previews localStorage is blocked, so every access is guarded
+   and falls back to in-memory — the game keeps working either way. ---------- */
+const LB_KEY = "tilttype_boards_v1";
+function loadBoards(){
+  try{
+    const raw = localStorage.getItem(LB_KEY);
+    if(raw){ const o=JSON.parse(raw); return {easy:o.easy||[],hard:o.hard||[],time:o.time||[],drive:o.drive||[]}; }
+  }catch(e){}
+  return { easy:[], hard:[], time:[], drive:[] };
+}
+function saveBoards(){ try{ localStorage.setItem(LB_KEY, JSON.stringify(boards)); }catch(e){} }
+const boards = loadBoards();
+
+/* ---------- App state ---------- */
+const S = {
+  mode:"easy", screen:"scHome",
+  running:false, sensor:false, tapMode:false,
+  neutral:{beta:0,gamma:0}, tilt:{x:0,y:0},
+  ball:{x:0,y:0}, target:{x:0,y:0},
+  word:"", prevWord:"", typed:"", hoverIdx:-1,
+  wordsDone:0, startTs:0, elapsed:0, remain:TIME_LIMIT,
+  raf:0, timerId:0, sensorProbe:0, sound:true,
+  lastScore:0, isRecord:false
+};
+
+/* ---------- DOM ---------- */
+const $ = s=>document.querySelector(s);
+const screens = { scHome:$("#scHome"), scCal:$("#scCal"), scGame:$("#scGame"), scDrive:$("#scDrive"), scResult:$("#scResult"), scBoard:$("#scBoard") };
+const grid=$("#grid"), ball=$("#ball"), play=$("#play"), flash=$("#flash");
+const dwell=$("#dwell"), dwellRing=dwell.querySelector(".ring");
+const targetEl=$("#target"), floor=$("#floor");
+const drivePlay=$("#drivePlay"), canvas=$("#road"), ctx=canvas.getContext("2d"), driveFlash=$("#driveFlash");
+let keyEls=[];
+
+function show(id){
+  Object.values(screens).forEach(s=>s.classList.remove("active"));
+  screens[id].classList.add("active"); S.screen=id;
+}
+
+/* ---------- Build grid ---------- */
+function buildGrid(){
+  grid.innerHTML="";
+  keyEls = LAYOUT.map((v,i)=>{
+    const d=document.createElement("div");
+    d.className="key"+(v===null?" gap":"")+(v==="DEL"?" del":"");
+    d.textContent = v||"";
+    d.dataset.idx=i;
+    grid.appendChild(d);
+    return d;
+  });
+}
+buildGrid();
+
+/* ---------- Audio (Web Audio API) ---------- */
+let actx=null;
+function audio(){ if(!actx){ try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } return actx; }
+function beep(freq,dur,type,vol){
+  if(!S.sound) return; const c=audio(); if(!c) return;
+  const o=c.createOscillator(), g=c.createGain();
+  o.type=type||"square"; o.frequency.value=freq;
+  g.gain.value=vol||0.06; o.connect(g); g.connect(c.destination);
+  const t=c.currentTime; o.start(t);
+  g.gain.setValueAtTime(vol||0.06,t); g.gain.exponentialRampToValueAtTime(0.0001,t+(dur||0.08));
+  o.stop(t+(dur||0.08)+0.02);
+}
+function sfxType(){ beep(520,0.06,"square",0.05); }
+function sfxHover(){ beep(300,0.03,"sine",0.03); }
+function sfxBad(){ beep(120,0.18,"sawtooth",0.07); }
+function sfxWin(){ [660,880,1046].forEach((f,i)=>setTimeout(()=>beep(f,0.12,"triangle",0.07),i*90)); }
+function buzz(ms){ if(navigator.vibrate) navigator.vibrate(ms); }
+
+/* ---------- Target word rendering ---------- */
+function renderTarget(){
+  targetEl.innerHTML="";
+  for(let i=0;i<S.word.length;i++){
+    const s=document.createElement("span");
+    s.className="ch"+(i<S.typed.length?" done":(i===S.typed.length?" next":""));
+    s.textContent=S.word[i];
+    targetEl.appendChild(s);
+  }
+}
+
+/* ---------- Sensor handling ---------- */
+let lastBeta=null, lastGamma=null, orientAttached=false, sensorSeen=false;
+const clampv=(v,a,b)=>v<a?a:(v>b?b:v);
+
+function attachOrient(){
+  if(orientAttached) return;
+  window.addEventListener("deviceorientation", handleOrient, true);
+  // some Android devices only emit the "absolute" variant
+  window.addEventListener("deviceorientationabsolute", handleOrient, true);
+  orientAttached=true;
+}
+
+function handleOrient(e){
+  if(e.beta===null && e.gamma===null) return;
+  lastBeta = e.beta||0; lastGamma = e.gamma||0; sensorSeen=true;
+
+  // live feedback while still on the calibrate screen
+  if(S.screen==="scCal"){
+    setReadout(lastBeta,lastGamma);
+    calStatus("เซนเซอร์ทำงานแล้ว เอียงเครื่องดูค่าด้านบนขยับได้เลย","ok");
+  }
+
+  if(!S.running) return;
+  // capture the neutral point from the first real reading after start
+  if(S.needNeutral){ S.neutral={beta:lastBeta,gamma:lastGamma}; S.needNeutral=false; }
+  if(!S.sensor) S.sensor=true;
+  if(S.mode==="drive") return; // driving reads lastGamma directly in its own loop
+
+  const SENS=25;
+  const dg=clampv(lastGamma-S.neutral.gamma,-45,45); // left-right
+  const db=clampv(lastBeta -S.neutral.beta ,-45,45); // up-down
+  S.tilt.x=dg; S.tilt.y=db;
+  S.target.x=0.5+(dg/SENS)*0.5;
+  S.target.y=0.5+(db/SENS)*0.5;
+  floor.style.transform=
+    `perspective(520px) rotateX(62deg) translate3d(${dg*-1.4}px, ${10 + db*0.4}%, 0)`;
+}
+
+// resolves true once real orientation data has arrived, else false after ms
+function waitForSensor(ms){
+  return new Promise(res=>{
+    if(sensorSeen) return res(true);
+    const t0=performance.now();
+    const iv=setInterval(()=>{
+      if(sensorSeen){ clearInterval(iv); res(true); }
+      else if(performance.now()-t0>ms){ clearInterval(iv); res(false); }
+    },50);
+  });
+}
+
+// -> "granted" | "denied" | "error" | "noprompt" | "unsupported"
+async function askPermission(){
+  const D = window.DeviceOrientationEvent;
+  if(!D) return "unsupported";
+  if(typeof D.requestPermission==="function"){          // iOS 13+
+    try{ const r=await D.requestPermission(); return r==="granted"?"granted":"denied"; }
+    catch(e){ return "error"; }
+  }
+  return "noprompt";                                     // Android & most others: no prompt
+}
+
+function setReadout(b,g){
+  const el=$("#calReadout"); if(!el) return;
+  el.textContent = (b===null||b===undefined) ? "β —   γ —"
+    : `β ${Math.round(b)}°   γ ${Math.round(g)}°`;
+}
+function calStatus(msg,kind){
+  const el=$("#calStatus"); if(!el) return;
+  el.textContent=msg||""; el.className="status"+(kind?(" "+kind):"");
+}
+
+/* ---------- Game flow ---------- */
+function startMode(mode){
+  S.mode=mode; show("scCal");
+  $("#calTitle").textContent = mode==="time" ? "พร้อมลุย 60 วินาที?"
+    : (mode==="drive" ? "พร้อมออกตัว?" : "ตั้งท่าให้พร้อม");
+  $("#calText").textContent = mode==="drive"
+    ? "ถือมือถือในท่าที่ถนัด ท่านี้จะเป็นตำแหน่งรถวิ่งตรง เอียงซ้าย-ขวาเพื่อเลี้ยว"
+    : "ถือมือถือในท่าที่ถนัด (เอียงเข้าหาตัวนิดหน่อยก็ได้) ตำแหน่งนี้จะกลายเป็นจุดกึ่งกลาง";
+  initCalibrate();
+}
+
+function initCalibrate(){
+  setReadout(null,null);
+  const D = window.DeviceOrientationEvent;
+  if(!window.isSecureContext){
+    calStatus("หน้านี้ไม่ได้เปิดผ่าน HTTPS เซนเซอร์การเอียงจะถูกบล็อก — อัปโหลดไฟล์ขึ้นโฮสต์ (Vercel / GitHub Pages / Netlify) แล้วเปิดลิงก์ https บนมือถือ","warn");
+  } else if(window.self!==window.top){
+    calStatus("กำลังเล่นในหน้าตัวอย่าง เบราว์เซอร์มักปิดเซนเซอร์ไว้ในกรอบนี้ — เปิดไฟล์บนมือถือจริงเพื่อใช้การเอียง","warn");
+  } else if(!D){
+    calStatus("อุปกรณ์นี้ไม่มีเซนเซอร์การเอียง เกมนี้ต้องเล่นบนมือถือที่มีเซนเซอร์","warn");
+  } else {
+    calStatus("กดปุ่มด้านล่างเพื่อขอสิทธิ์ แล้วลองเอียงเครื่องให้ค่า β / γ ขยับ","");
+  }
+  // Non-iOS needs no prompt — attach now so the readout is live before starting
+  if(D && typeof D.requestPermission!=="function"){ attachOrient(); }
+}
+
+async function begin(){
+  calStatus("กำลังขอสิทธิ์เซนเซอร์...","");
+  const res = await askPermission();
+  if(res==="granted" || res==="noprompt"){
+    if(res==="granted") calStatus("อนุญาตแล้ว กำลังเชื่อมต่อเซนเซอร์...","ok");
+    attachOrient();
+    const ok = await waitForSensor(1400);
+    if(ok){ launch(); }
+    else { calStatus("ยังไม่พบสัญญาณเซนเซอร์ — เช็กว่าเปิดผ่านลิงก์ https บนมือถือที่มีเซนเซอร์ แล้วลองใหม่","warn"); }
+  }
+  else if(res==="denied"){ calStatus("ถูกปฏิเสธสิทธิ์ — เปิดสิทธิ์ Motion & Orientation ในตั้งค่าเบราว์เซอร์ แล้วลองใหม่","warn"); }
+  else if(res==="error"){ calStatus("ขอสิทธิ์ไม่ได้ — มักเป็นเพราะไม่ได้เปิดผ่าน HTTPS บนมือถือ ลองเปิดผ่านลิงก์ https","warn"); }
+  else { calStatus("อุปกรณ์นี้ไม่มีเซนเซอร์การเอียง เกมนี้ต้องเล่นบนมือถือที่มีเซนเซอร์","warn"); }
+}
+
+function launch(){ if(S.mode==="drive") startDrive(); else startGame(); }
+
+function startGame(){
+  audio(); // unlock audio inside the user gesture
+  show("scGame");
+  S.sensor=false; S.needNeutral=true;
+  S.dwellStart=0; S.dwellArmed=false; S.hoverIdx=-1; dwell.classList.remove("show");
+  S.neutral={beta:lastBeta||0, gamma:lastGamma||0};
+  $("#gameHint").textContent="เอียงไปค้างบนตัวอักษรสักครู่ วงแหวนครบแล้วพิมพ์ให้เอง (ไม่ต้องแตะ)";
+
+  // reset round
+  S.wordsDone=0; S.prevWord=""; S.typed="";
+  S.ball.x=play.clientWidth/2; S.ball.y=play.clientHeight/2;
+  S.target.x=0.5; S.target.y=0.5;
+  nextWord();
+  updateHud();
+
+  S.running=true; S.startTs=performance.now(); S.elapsed=0; S.remain=TIME_LIMIT;
+  if(S.mode==="time"){ startCountdown(); }
+  loop();
+}
+
+function nextWord(){
+  const pool = S.mode==="hard" ? WORDS.hard : (S.mode==="time" ? WORDS.easy : WORDS.easy);
+  S.word = pickWord(pool, S.prevWord); S.prevWord=S.word; S.typed="";
+  renderTarget();
+}
+
+function startCountdown(){
+  clearInterval(S.timerId);
+  S.timerId=setInterval(()=>{
+    S.remain -= 0.1;
+    if(S.remain<=0){ S.remain=0; endRound(); }
+    updateHud();
+  },100);
+}
+
+function updateHud(){
+  if(S.mode==="time"){
+    $("#hudTime").querySelector("b").textContent=S.remain.toFixed(1);
+    $("#hudTime").querySelector("small").textContent="เวลา";
+    $("#hudScore").querySelector("b").textContent=S.wordsDone;
+    $("#hudScore").querySelector("small").textContent="คำ";
+  } else {
+    S.elapsed=(performance.now()-S.startTs)/1000;
+    $("#hudTime").querySelector("b").textContent=S.elapsed.toFixed(1);
+    $("#hudTime").querySelector("small").textContent="วินาที";
+    $("#hudScore").querySelector("b").textContent=S.wordsDone+"/"+WORDS_PER_ROUND;
+    $("#hudScore").querySelector("small").textContent="คำ";
+  }
+}
+
+/* ---------- Typing ---------- */
+function typeIndex(idx){
+  const ch = LAYOUT[idx];
+  const need = S.word[S.typed.length];
+  if(ch===need){
+    S.typed += ch; renderTarget(); sfxType(); buzz(12); punch(idx);
+    if(S.typed===S.word){ wordComplete(); }
+  } else {
+    sfxBad(); buzz([18,40,18]); flashFx("bad");   // wrong letter is simply ignored
+  }
+}
+function punch(idx){ const k=keyEls[idx]; if(!k)return; k.classList.remove("punch"); void k.offsetWidth; k.classList.add("punch"); }
+
+function wordComplete(){
+  S.wordsDone++; sfxWin(); buzz([20,30,60]); flashFx("ok");
+  updateHud();
+  if(S.mode!=="time" && S.wordsDone>=WORDS_PER_ROUND){ endRound(); return; }
+  setTimeout(nextWord, 260);
+}
+
+function endRound(){
+  if(!S.running) return;
+  S.running=false; cancelAnimationFrame(S.raf); clearInterval(S.timerId); clearTimeout(S.sensorProbe);
+  dwell.classList.remove("show");
+  const score = S.mode==="time" ? S.wordsDone : +((performance.now()-S.startTs)/1000).toFixed(1);
+  finishRun(score);
+}
+
+// shared finish for every mode
+function finishRun(score){
+  S.lastScore = score;
+  const lower = isLowerBetter(S.mode);
+  const b = boards[S.mode] || [];
+  S.isRecord = b.length<5 || (lower ? score < b[b.length-1].score : score > b[b.length-1].score);
+  showResult();
+}
+
+/* ---------- Result screen ---------- */
+function showResult(){
+  $("#resLabel").textContent =
+    S.mode==="time" ? "พิมพ์ได้ทั้งหมด" : (S.mode==="drive" ? "ระยะทางที่วิ่งได้" : "เวลาที่ใช้");
+  $("#resScore").textContent = fmtScore(S.mode, S.lastScore);
+  $("#resScore").classList.toggle("rec", S.isRecord);
+  $("#recBadge").style.display = S.isRecord ? "inline-block":"none";
+  $("#nameBlock").style.display = "block";
+  $("#btnSave").disabled=false; $("#btnSave").textContent="บันทึก";
+  show("scResult");
+}
+
+function saveScore(){
+  const nm = ($("#nameInput").value||"YOU").trim().slice(0,8).toUpperCase() || "YOU";
+  boards[S.mode] = rankInsert(boards[S.mode], {name:nm, score:S.lastScore}, isLowerBetter(S.mode), 5);
+  saveBoards();
+  $("#btnSave").disabled=true; $("#btnSave").textContent="บันทึกแล้ว";
+  $("#nameBlock").style.display="none";
+  buzz(20);
+}
+
+/* ---------- Leaderboard render ---------- */
+function renderBoard(mode){
+  const list=boards[mode]||[];
+  const el=$("#lbList"); el.innerHTML="";
+  if(!list.length){ el.innerHTML='<div class="lb-empty">ยังไม่มีสถิติในโหมดนี้<br>ไปทำคะแนนแรกกันเลย!</div>'; return; }
+  list.forEach((r,i)=>{
+    const row=document.createElement("div");
+    row.className="lb-row"+(i<3?" top"+(i+1):"");
+    row.innerHTML=`<div class="rk">${i+1}</div><div class="nm">${escapeHtml(r.name)}</div><div class="sc">${fmtScore(mode,r.score)}</div>`;
+    el.appendChild(row);
+  });
+}
+function escapeHtml(s){ return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+/* ---------- Render loop ---------- */
+let trails=[];
+function loop(){
+  if(!S.running) return;
+  const W=play.clientWidth, H=play.clientHeight;
+  // move ball toward tilt target
+  const tx=S.target.x*W, ty=S.target.y*H;
+  S.ball.x=lerpClamp(S.ball.x, tx, 0.22, 18, W-18);
+  S.ball.y=lerpClamp(S.ball.y, ty, 0.22, 18, H-18);
+  ball.style.transform=`translate(${S.ball.x}px,${S.ball.y}px)`;
+
+  // hover detection
+  const gx=grid.offsetLeft, gy=grid.offsetTop, gw=grid.clientWidth, gh=grid.clientHeight;
+  const fx=(S.ball.x-gx)/gw, fy=(S.ball.y-gy)/gh;
+  let idx=-1;
+  if(fx>=0&&fx<=1&&fy>=0&&fy<=1){ idx=cellIndexFromFraction(fx,fy); if(LAYOUT[idx]===null) idx=-1; }
+  if(idx!==S.hoverIdx){
+    keyEls.forEach(k=>k.classList.remove("hot"));
+    if(idx>=0){ keyEls[idx].classList.add("hot"); sfxHover(); }
+    S.hoverIdx=idx;
+    S.dwellStart=performance.now(); S.dwellArmed=true;   // restart dwell on a new key
+  }
+
+  // dwell-to-select: rest on a key and it types itself — no tap needed
+  const now=performance.now();
+  if(S.sensor && S.hoverIdx>=0){
+    positionDwell(keyEls[S.hoverIdx]);
+    let prog=0;
+    if(S.dwellArmed){
+      prog=Math.min(1,(now-S.dwellStart)/DWELL_MS);
+      if(prog>=1){ typeIndex(S.hoverIdx); S.dwellArmed=false; S.dwellStart=now; prog=0; }
+    } else if(now-S.dwellStart>=DWELL_COOLDOWN){
+      S.dwellArmed=true; S.dwellStart=now;      // allow refill (repeat letters like OO)
+    }
+    setDwellRing(prog);
+    dwell.classList.add("show");
+  } else {
+    dwell.classList.remove("show");
+  }
+  S.raf=requestAnimationFrame(loop);
+}
+
+function positionDwell(key){
+  const cx=grid.offsetLeft+key.offsetLeft+key.clientWidth/2;
+  const cy=grid.offsetTop +key.offsetTop +key.clientHeight/2;
+  const sz=Math.max(key.clientWidth,key.clientHeight);
+  dwell.style.left=cx+"px"; dwell.style.top=cy+"px";
+  dwell.style.width=sz+"px"; dwell.style.height=sz+"px";
+}
+function setDwellRing(p){ dwellRing.style.strokeDashoffset = DWELL_CIRC*(1-p); }
+
+function flashFx(kind){ flash.className="flash "+kind; setTimeout(()=>flash.className="flash",480); }
+
+/* ---------- Driving mode (pseudo-3D perspective racer) ---------- */
+function ensureCanvas(){
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  const w=drivePlay.clientWidth, h=drivePlay.clientHeight;
+  if(canvas.width!==Math.round(w*dpr) || canvas.height!==Math.round(h*dpr)){
+    canvas.width=Math.round(w*dpr); canvas.height=Math.round(h*dpr);
+    canvas.style.width=w+"px"; canvas.style.height=h+"px";
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  return {w,h};
+}
+
+function startDrive(){
+  audio(); show("scDrive");
+  S.sensor=false; S.needNeutral=true;
+  S.neutral={beta:lastBeta||0, gamma:lastGamma||0};
+  ensureCanvas();
+  S.dist=0; S.speed=DRIVE_SPD0; S.travelZ=0; S.nextSpawnZ=1.4;
+  S.obstacles=[]; S.puffs=[]; S.curve=0; S.shake=0;
+  S.carLane=0; S.carVLane=0; S.tickAt=0; S.lastFrame=performance.now();
+  S.stars=[]; for(let i=0;i<42;i++) S.stars.push({x:Math.random(),y:Math.random(),s:Math.random()*1.6+0.4});
+  $("#hudDist").querySelector("b").textContent="0";
+  $("#hudBest").querySelector("b").textContent=(boards.drive[0]?.score||0);
+  S.running=true; driveLoop();
+}
+
+function spawnObstacles(){
+  const doubleChance = Math.min(0.5, 0.12 + S.dist*0.0004); // more walls the further you go
+  if(Math.random() < doubleChance){
+    const open = DRIVE_SLOTS[Math.floor(Math.random()*DRIVE_SLOTS.length)]; // one lane stays clear
+    DRIVE_SLOTS.forEach(l=>{ if(l!==open) S.obstacles.push({zw:DRIVE_SPAWN_Z, lane:l, scored:false}); });
+  } else {
+    const lane = (Math.random()*2-1)*LANE_EDGE; // anywhere across the full road
+    S.obstacles.push({zw:DRIVE_SPAWN_Z, lane, scored:false});
+  }
+}
+
+function driveLoop(){
+  if(!S.running) return;
+  const {w,h}=ensureCanvas();
+  const t=performance.now(); let dt=(t-S.lastFrame)/1000; S.lastFrame=t; if(dt>0.05)dt=0.05;
+
+  // forward progression
+  S.speed = DRIVE_SPD0 + S.dist*DRIVE_SPD_GAIN/100;
+  const dz = S.speed*dt;
+  S.travelZ += dz; S.dist += dz*DRIVE_METER;
+  S.curve = Math.sin(S.travelZ*0.20)*0.5 + Math.sin(S.travelZ*0.07)*0.25;
+
+  // steering: tilt can push past the road edge; leaving the road is a crash
+  const targetLane = steerTargetX(lastGamma, S.neutral.gamma, 0, STEER_REACH);
+  const nl = lerpClamp(S.carLane, targetLane, 0.16, -STEER_REACH, STEER_REACH);
+  S.carVLane = nl - S.carLane; S.carLane = clampv(nl + S.curve*dt*0.20, -STEER_REACH, STEER_REACH);
+  if(Math.abs(S.carLane) > OFFROAD) return driveCrash();
+
+  // spawn: mostly a single car anywhere across the road; sometimes a 2-car wall
+  if(S.travelZ>=S.nextSpawnZ){
+    spawnObstacles();
+    S.nextSpawnZ = S.travelZ + Math.max(1.0, 2.2 - S.dist*0.0008);
+  }
+  // advance; collision checked across the whole near-window (clear hitbox)
+  for(let i=S.obstacles.length-1;i>=0;i--){
+    const o=S.obstacles[i]; o.zw -= dz;
+    if(!o.scored && o.zw<=0.20 && o.zw>0){
+      if(Math.abs(S.carLane-o.lane) < COLLIDE_LANE) return driveCrash();
+      if(o.zw<=0.04){ o.scored=true; sfxHover(); } // cleanly passed the car
+    }
+    if(o.zw<=-0.05) S.obstacles.splice(i,1);
+  }
+  // exhaust puffs + shake decay
+  if(Math.random()<0.5) S.puffs.push({x:(Math.random()-0.5)*10, y:0, life:0.5, r:3});
+  for(let i=S.puffs.length-1;i>=0;i--){ const p=S.puffs[i]; p.life-=dt; p.y+=dt*44; p.r+=dt*22; if(p.life<=0)S.puffs.splice(i,1); }
+  S.shake=Math.max(0,S.shake-dt*6);
+
+  drawScene(w,h);
+  $("#hudDist").querySelector("b").textContent=Math.floor(S.dist);
+  S.raf=requestAnimationFrame(driveLoop);
+}
+
+function roadCenterAt(w,near){ return w/2 + S.curve*w*0.9*(1-near)*(1-near); }
+
+function drawScene(w,h){
+  const horizonY=h*0.34, roadH=h-horizonY, bottomHalf=w*0.46;
+  ctx.save();
+  if(S.shake>0) ctx.translate((Math.random()-0.5)*S.shake*10,(Math.random()-0.5)*S.shake*8);
+
+  // sky + parallax stars + horizon glow
+  const sky=ctx.createLinearGradient(0,0,0,horizonY);
+  sky.addColorStop(0,"#0E0E10"); sky.addColorStop(1,"#242428");
+  ctx.fillStyle=sky; ctx.fillRect(-20,0,w+40,horizonY);
+  ctx.fillStyle="rgba(255,255,255,.8)";
+  S.stars.forEach(s=>{ const sx=((s.x*w - S.curve*40)%w+w)%w; ctx.fillRect(sx,s.y*horizonY,s.s,s.s); });
+  ctx.fillStyle="rgba(120,120,128,.5)"; ctx.fillRect(0,horizonY-1,w,1); // flat horizon line
+
+  // perspective road, drawn as depth-shaded rows
+  for(let y=horizonY; y<h; y+=3){
+    const near=(y-horizonY)/roadH; if(near<=0.001) continue;
+    const zw=depthFromNear(near);
+    const band=(Math.floor(zw*0.55 + S.travelZ*0.55)%2)===0;
+    const cx=roadCenterAt(w,near), hw=bottomHalf*near+3;
+    ctx.fillStyle=band?"#101012":"#0C0C0E"; ctx.fillRect(0,y,w,3);        // grass
+    ctx.fillStyle=band?"#202024":"#18181B"; ctx.fillRect(cx-hw,y,2*hw,3); // road
+    const rw=Math.max(2,hw*0.10);
+    ctx.fillStyle=band?"#C8C8CE":"#5A5A60"; ctx.fillRect(cx-hw,y,rw,3); ctx.fillRect(cx+hw-rw,y,rw,3); // rumble
+    if(band && near>0.05){ const dw=Math.max(1.4,hw*0.045); ctx.fillStyle="rgba(240,240,245,.9)"; ctx.fillRect(cx-dw,y,2*dw,3); } // dashes
+  }
+
+  // roadside pylons rushing past
+  ctx.save(); ctx.fillStyle="#5A5A60";
+  for(let k=0;k<10;k++){
+    const zwP=(k*0.6)-(S.travelZ%0.6); if(zwP<=0.02) continue;
+    const near=projNear(zwP), y=horizonY+near*roadH, hw=bottomHalf*near+3, cx=roadCenterAt(w,near);
+    const ph=Math.max(3,26*near), pw=Math.max(2,5*near);
+    ctx.fillRect(cx-hw*1.22-pw,y-ph,pw,ph); ctx.fillRect(cx+hw*1.22,y-ph,pw,ph);
+  }
+  ctx.restore();
+
+  // obstacles, far -> near
+  S.obstacles.slice().sort((a,b)=>b.zw-a.zw).forEach(o=>{
+    const near=projNear(o.zw), y=horizonY+near*roadH, hw=bottomHalf*near+3;
+    const cx=roadCenterAt(w,near)+o.lane*hw, cw=bottomHalf*CAR_W_FRAC*near;
+    drawCar(cx, y-cw*0.75, cw, "#9A9AA2", 0, false);
+  });
+
+  // player car + exhaust
+  const pcw=bottomHalf*CAR_W_FRAC, pcy=h-16-pcw*0.75, pcx=w/2 + S.carLane*bottomHalf;
+  S.puffs.forEach(p=>{ ctx.globalAlpha=Math.max(0,p.life); ctx.fillStyle="#FFFFFF";
+    ctx.beginPath(); ctx.arc(pcx+p.x, pcy+pcw*1.1+p.y, p.r, 0, 7); ctx.fill(); });
+  ctx.globalAlpha=1;
+  drawCar(pcx, pcy, pcw, "#FFFFFF", clampv(S.carVLane*7,-0.32,0.32), true);
+
+  // speed streaks
+  ctx.strokeStyle="rgba(255,255,255,.16)"; ctx.lineWidth=2;
+  for(let k=0;k<5;k++){ const x=((k*137 + S.travelZ*300)%w+w)%w;
+    ctx.beginPath(); ctx.moveTo(x,horizonY+10); ctx.lineTo(x,horizonY+10+S.speed*14); ctx.stroke(); }
+
+  ctx.restore();
+}
+
+function drawCar(cx,cy,cw,base,lean,isPlayer){
+  const ch=cw*1.5;
+  ctx.save(); ctx.translate(cx,cy); ctx.rotate(lean);
+  // soft cast shadow (grounding, matte — not a glow)
+  ctx.fillStyle="rgba(0,0,0,.32)";
+  ctx.beginPath(); ctx.ellipse(0,ch*0.52,cw*0.6,ch*0.12,0,0,7); ctx.fill();
+  // wheels (flat dark)
+  const wr=cw*0.18, wh=ch*0.30;
+  ctx.fillStyle="#0A0A0C";
+  [[-cw/2-wr*0.15,-ch*0.30],[cw/2-wr*0.85,-ch*0.30],[-cw/2-wr*0.15,ch*0.02],[cw/2-wr*0.85,ch*0.02]].forEach(([wx,wy])=>{
+    roundRectP(wx,wy,wr,wh,wr*0.4); ctx.fill();
+  });
+  // body: single flat matte fill
+  ctx.fillStyle=base; roundRectP(-cw/2,-ch/2,cw,ch,cw*0.24); ctx.fill();
+  // cabin: darker flat panel (gives form without shine)
+  ctx.fillStyle= isPlayer ? "#20202A" : "#141418";
+  roundRectP(-cw*0.32,-ch*0.24,cw*0.64,ch*0.42,cw*0.14); ctx.fill();
+  // lights: small flat blocks, no glow
+  ctx.fillStyle= isPlayer ? "#E8E8EA" : "#5A5A60";
+  if(isPlayer){ ctx.fillRect(-cw*0.36,-ch*0.5,cw*0.22,ch*0.06); ctx.fillRect(cw*0.14,-ch*0.5,cw*0.22,ch*0.06); }
+  else{ ctx.fillRect(-cw*0.36,ch*0.46,cw*0.22,ch*0.05); ctx.fillRect(cw*0.14,ch*0.46,cw*0.22,ch*0.05); }
+  ctx.restore();
+}
+function roundRectP(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+function driveCrash(){
+  if(!S.running) return;
+  S.running=false; cancelAnimationFrame(S.raf);
+  S.shake=1.2; sfxBad(); buzz([40,60,120]);
+  driveFlash.className="flash bad"; setTimeout(()=>driveFlash.className="flash",400);
+  finishRun(Math.floor(S.dist));
+}
+
+/* ---------- Wiring ---------- */
+document.querySelectorAll(".mode").forEach(b=> b.addEventListener("click",()=>startMode(b.dataset.mode)));
+$("#btnBegin").addEventListener("click", begin);
+$("#btnCalBack").addEventListener("click", ()=>show("scHome"));
+const stopAll=()=>{ S.running=false; cancelAnimationFrame(S.raf); clearInterval(S.timerId); clearTimeout(S.sensorProbe); };
+$("#btnQuit").addEventListener("click", ()=>{ stopAll(); show("scHome"); });
+$("#btnQuitDrive").addEventListener("click", ()=>{ stopAll(); show("scHome"); });
+$("#btnAgain").addEventListener("click", ()=>startMode(S.mode));
+$("#btnHome").addEventListener("click", ()=>show("scHome"));
+$("#btnSave").addEventListener("click", saveScore);
+$("#nameInput").addEventListener("keydown",e=>{ if(e.key==="Enter") saveScore(); });
+const toggleSound=()=>{ S.sound=!S.sound; document.querySelectorAll(".snd").forEach(b=>b.classList.toggle("muted", !S.sound)); };
+$("#btnSound").addEventListener("click", toggleSound);
+$("#btnSoundD").addEventListener("click", toggleSound);
+$("#btnBoardClear").addEventListener("click", ()=>{
+  if(confirm("ล้างกระดานคะแนนทั้งหมด?")){
+    boards.easy=[]; boards.hard=[]; boards.time=[]; boards.drive=[]; saveBoards();
+    const cur=document.querySelector(".lb-tabs button.on");
+    renderBoard(cur?cur.dataset.lb:"easy");
+  }
+});
+
+$("#btnBoard").addEventListener("click", ()=>{ openBoard("easy"); });
+$("#btnBoardBack").addEventListener("click", ()=>show("scHome"));
+function openBoard(mode){
+  document.querySelectorAll(".lb-tabs button").forEach(t=>t.classList.toggle("on", t.dataset.lb===mode));
+  renderBoard(mode); show("scBoard");
+}
+document.querySelectorAll(".lb-tabs button").forEach(t=> t.addEventListener("click",()=>openBoard(t.dataset.lb)));
+
+/* keep ball inside on resize */
+window.addEventListener("resize", ()=>{
+  if(S.screen==="scGame"){ S.ball.x=Math.min(S.ball.x,play.clientWidth-18); S.ball.y=Math.min(S.ball.y,play.clientHeight-18); }
+});
+
+/* expose pure fns for external test harness (no effect in browser) */
+window.__TT={cellIndexFromFraction,pickWord,rankInsert,lerpClamp,buildLayout,LAYOUT,rectsOverlap,steerTargetX,isLowerBetter,fmtScore,projNear,depthFromNear};
+</script>
+</body>
+</html>
